@@ -8,7 +8,9 @@
   font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-body, html, #root {
+body,
+html,
+#root {
   width: 100%;
   min-height: 100%;
   background-color: #16151f;
@@ -64,12 +66,10 @@ body, html, #root {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    180deg,
-    rgba(20, 16, 38, 0.45) 0%,
-    rgba(14, 12, 28, 0.2) 40%,
-    rgba(10, 8, 22, 0.88) 100%
-  );
+  background: linear-gradient(180deg,
+      rgba(20, 16, 38, 0.45) 0%,
+      rgba(14, 12, 28, 0.2) 40%,
+      rgba(10, 8, 22, 0.88) 100%);
   z-index: 1;
 }
 
@@ -479,7 +479,11 @@ body, html, #root {
 
 /* Mobile Devices (< 768px) - Full Vertical Scrollability */
 @media (max-width: 767px) {
-  html, body, #root, .login-page-wrapper {
+
+  html,
+  body,
+  #root,
+  .login-page-wrapper {
     height: auto !important;
     min-height: 100vh !important;
     overflow-y: auto !important;
@@ -614,12 +618,27 @@ body, html, #root {
 }
 
 @keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-4px); }
-  75% { transform: translateX(4px); }
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-4px);
+  }
+
+  75% {
+    transform: translateX(4px);
+  }
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
