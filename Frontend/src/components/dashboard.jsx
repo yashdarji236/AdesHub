@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useSelector, useDispatch } from 'react-redux';
+import { logout } from '../store/authSlice';
+import { createProject, getUserProjects } from '../services/projectService';
 import {
   LayoutDashboard,
   Search,
@@ -118,6 +121,8 @@ const INITIAL_FILES = [];
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
+  const user = useSelector((state) => state.auth.user);
   const [activeNav, setActiveNav] = useState('dashboard');
   const [activeTab, setActiveTab] = useState('recently-viewed');
   const [searchQuery, setSearchQuery] = useState('');
@@ -131,6 +136,43 @@ const Dashboard = () => {
   const [showNameProjectModal, setShowNameProjectModal] = useState(false);
   const [selectedAdType, setSelectedAdType] = useState(null);
   const [projectName, setProjectName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+
+  // Fetch saved user projects from MongoDB on component load
+  useEffect(() => {
+    const loadProjects = async () => {
+      try {
+        setIsLoadingProjects(true);
+        const data = await getUserProjects();
+        if (data.success && Array.isArray(data.projects)) {
+          const loadedCards = data.projects.map((p) => {
+            const dateObj = new Date(p.createdAt);
+            const formattedDate = dateObj.toLocaleDateString([], { month: 'short', day: 'numeric' });
+            const formattedTime = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return {
+              id: p._id,
+              title: p.projectName,
+              edited: `Created ${formattedDate} at ${formattedTime}`,
+              type: 'design',
+              thumb: 'wireframe',
+              tab: 'recently-viewed',
+              starred: false,
+              format: p.projectCategory,
+              createdAt: p.createdAt,
+            };
+          });
+          setFiles(loadedCards);
+        }
+      } catch (error) {
+        console.error('Error fetching user projects:', error);
+      } finally {
+        setIsLoadingProjects(false);
+      }
+    };
+
+    loadProjects();
+  }, []);
 
   // Filter files
   const filteredFiles = files.filter((f) => {
@@ -170,32 +212,64 @@ const Dashboard = () => {
     setShowNameProjectModal(true);
   };
 
-  const handleSaveAndGoToEditor = () => {
+  const handleSaveAndGoToEditor = async () => {
+    if (isSaving) return;
     const chosen = AD_TYPES.find((a) => a.id === selectedAdType);
     const finalTitle = projectName.trim() || `${chosen?.title || 'Ad'} #${files.length + 1}`;
-    const newAd = {
-      id: `ad-${Date.now()}`,
-      title: finalTitle,
-      edited: 'Created just now',
-      type: 'design',
-      thumb: 'wireframe',
-      tab: 'recently-viewed',
-      starred: false,
-      format: selectedAdType
-    };
-    setFiles([newAd, ...files]);
-    setShowNameProjectModal(false);
-    setProjectName('');
-    setSelectedAdType(null);
+    const categoryTitle = chosen?.title || 'Poster ad';
+
+    setIsSaving(true);
+    try {
+      // 1. Store in Database via Backend API
+      const res = await createProject({
+        projectName: finalTitle,
+        projectCategory: categoryTitle,
+      });
+
+      const created = res.project;
+      const now = new Date(created?.createdAt || Date.now());
+      const formattedDate = now.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      const formattedTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      // 2. Generate and prepend new project card to Dashboard list
+      const newAd = {
+        id: created?._id || `ad-${Date.now()}`,
+        title: created?.projectName || finalTitle,
+        edited: `Created ${formattedDate} at ${formattedTime}`,
+        type: 'design',
+        thumb: 'wireframe',
+        tab: 'recently-viewed',
+        starred: false,
+        format: created?.projectCategory || categoryTitle,
+        createdAt: created?.createdAt || now,
+      };
+
+      setFiles((prev) => [newAd, ...prev]);
+    } catch (err) {
+      console.error('Failed to create project in backend:', err);
+      // Fallback local addition if network fails
+      const fallbackAd = {
+        id: `ad-${Date.now()}`,
+        title: finalTitle,
+        edited: 'Created just now',
+        type: 'design',
+        thumb: 'wireframe',
+        tab: 'recently-viewed',
+        starred: false,
+        format: categoryTitle,
+      };
+      setFiles((prev) => [fallbackAd, ...prev]);
+    } finally {
+      setIsSaving(false);
+      // 3. Stay on dashboard & close modal
+      setShowNameProjectModal(false);
+      setProjectName('');
+      setSelectedAdType(null);
+    }
   };
 
   const handleLogout = () => {
-    try {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-    } catch (e) {
-      console.error(e);
-    }
+    dispatch(logout());
     navigate('/login');
   };
 
@@ -214,8 +288,10 @@ const Dashboard = () => {
           {/* User Profile / Workspace Header */}
           <div className="figma-profile-row">
             <div className="figma-profile-badge" title="Switch workspace">
-              <div className="figma-avatar-n">N</div>
-              <span className="figma-username">nisarg</span>
+              <div className="figma-avatar-n">
+                {user?.displayName ? user.displayName[0].toUpperCase() : 'U'}
+              </div>
+              <span className="figma-username">{user?.displayName || 'User'}</span>
               <ChevronDown size={13} color="#b3b3b3" />
             </div>
             <button className="figma-bell-icon-btn" title="Activity & Notifications">
@@ -509,30 +585,52 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {/* Dynamically created ad cards */}
-            {filteredFiles.map((file) => (
-              <div key={file.id} className="figma-file-box">
-                <div className="figma-file-canvas-preview">
-                  <div className="figma-canvas-wireframe">
-                    <div className="figma-wireframe-sheet">
-                      <div className="figma-wire-head"></div>
-                      <div className="figma-wire-rect"></div>
-                      <div className="figma-wire-head" style={{ width: '40%', background: '#cbd5e1' }}></div>
+            {/* Dynamically created ad cards or Skeleton loaders */}
+            {isLoadingProjects ? (
+              Array.from({ length: 3 }).map((_, idx) => (
+                <div key={`skel-card-${idx}`} className="figma-skeleton-box">
+                  <div className="figma-skeleton-canvas">
+                    <div className="figma-skeleton-inner-wire" />
+                  </div>
+                  <div className="figma-skeleton-bottom">
+                    <div className="figma-skeleton-icon" />
+                    <div className="figma-skeleton-lines">
+                      <div className="figma-skeleton-line-title" />
+                      <div className="figma-skeleton-line-subtitle" />
                     </div>
                   </div>
                 </div>
-
-                <div className="figma-file-card-bottom">
-                  <div className="figma-file-type-badge design">
-                    <FigmaDesignIcon size={14} />
+              ))
+            ) : (
+              filteredFiles.map((file) => (
+                <div
+                  key={file.id}
+                  className="figma-file-box"
+                  onClick={() => navigate(`/editor/${file.id}`, { state: { projectName: file.title, projectCategory: file.format } })}
+                  title={`Open ${file.title} in Editor`}
+                >
+                  <div className="figma-file-canvas-preview">
+                    <div className="figma-canvas-wireframe">
+                      <div className="figma-wireframe-sheet">
+                        <div className="figma-wire-head"></div>
+                        <div className="figma-wire-rect"></div>
+                        <div className="figma-wire-head" style={{ width: '40%', background: '#cbd5e1' }}></div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="figma-file-title-block">
-                    <span className="figma-file-name-line">{file.title}</span>
-                    <span className="figma-file-edited-line">{file.edited}</span>
+
+                  <div className="figma-file-card-bottom">
+                    <div className="figma-file-type-badge design">
+                      <FigmaDesignIcon size={14} />
+                    </div>
+                    <div className="figma-file-title-block">
+                      <span className="figma-file-name-line">{file.title}</span>
+                      <span className="figma-file-edited-line">{file.edited}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         ) : (
           <div className="figma-files-list-view">
@@ -550,30 +648,37 @@ const Dashboard = () => {
               <span></span>
             </div>
 
-            {filteredFiles.map((file) => (
-              <div key={file.id} className="figma-list-item-row">
-                <div className="figma-list-item-name">
-                  <FigmaDesignIcon size={16} />
-                  <span>{file.title}</span>
-                </div>
-                <span style={{ color: '#aaa' }}>Ad Project</span>
-                <span style={{ color: '#888' }}>{file.edited}</span>
-                <button
-                  style={{ background: 'transparent', border: 'none', color: file.starred ? '#facc15' : '#666', cursor: 'pointer' }}
-                  onClick={(e) => toggleStarFile(file.id, e)}
+            {isLoadingProjects ? (
+              Array.from({ length: 3 }).map((_, idx) => (
+                <div key={`skel-list-${idx}`} className="figma-skeleton-list-item" />
+              ))
+            ) : (
+              filteredFiles.map((file) => (
+                <div
+                  key={file.id}
+                  className="figma-list-item-row"
+                  onClick={() => navigate(`/editor/${file.id}`, { state: { projectName: file.title, projectCategory: file.format } })}
+                  style={{ cursor: 'pointer' }}
+                  title={`Open ${file.title} in Editor`}
                 >
-                  <Star size={16} fill={file.starred ? 'currentColor' : 'none'} />
-                </button>
-              </div>
-            ))}
+                  <div className="figma-list-item-name">
+                    <FigmaDesignIcon size={16} />
+                    <span>{file.title}</span>
+                  </div>
+                  <span style={{ color: '#aaa' }}>Ad Project</span>
+                  <span style={{ color: '#888' }}>{file.edited}</span>
+                  <button
+                    style={{ background: 'transparent', border: 'none', color: file.starred ? '#facc15' : '#666', cursor: 'pointer' }}
+                    onClick={(e) => toggleStarFile(file.id, e)}
+                  >
+                    <Star size={16} fill={file.starred ? 'currentColor' : 'none'} />
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         )}
       </main>
-
-      {/* Floating Bottom-Right Help Button */}
-      <button className="figma-bottom-help-btn" title="Help and support">
-        ?
-      </button>
 
       {/* Step 1: Which Type of Ad Modal Popup */}
       {showCreateAdModal && (
@@ -720,10 +825,10 @@ const Dashboard = () => {
               </button>
               <button
                 className="figma-btn-modal-save-editor"
-                disabled={!projectName.trim()}
+                disabled={!projectName.trim() || isSaving}
                 onClick={handleSaveAndGoToEditor}
               >
-                <span>Save & go to editor</span>
+                <span>{isSaving ? 'Saving...' : 'Save & go to editor'}</span>
                 <ArrowRight size={16} />
               </button>
             </div>

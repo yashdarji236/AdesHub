@@ -3,30 +3,35 @@ import mongoose from 'mongoose';
 const UserSchema = new mongoose.Schema({
   googleId: {
     type: String,
-    required: false,
-    sparse: true,
-    unique: true
+    default: undefined,
   },
   displayName: {
     type: String,
-    required: true
+    required: true,
   },
   email: {
     type: String,
     required: true,
-    unique: true
+    unique: true,
   },
   password: {
     type: String,
-    required: false
+    required: false,
   },
   avatar: {
-    type: String
+    type: String,
   },
   createdAt: {
     type: Date,
-    default: Date.now
-  }
+    default: Date.now,
+  },
 });
 
-export default mongoose.model('User', UserSchema);
+const User = mongoose.model('User', UserSchema);
+
+// Automatically drop outdated or conflicting googleId index on DB startup
+User.collection.dropIndex('googleId_1').catch(() => {
+  // Index didn't exist or already dropped, safe to ignore
+});
+
+export default User;

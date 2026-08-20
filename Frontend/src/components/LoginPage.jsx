@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useDispatch } from 'react-redux';
+import { setCredentials } from '../store/authSlice';
+import { login, register } from '../services/authService';
 import './LoginPage.css';
 import loginBgImg from '../assets/Login_page.png';
 import { Eye, EyeOff, ArrowRight, Check, AlertCircle } from 'lucide-react';
 
 const LoginPage = () => {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const [isLogin, setIsLogin] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(true);
@@ -31,35 +35,17 @@ const LoginPage = () => {
     }
 
     try {
-      const endpoint = isLogin
-        ? 'http://localhost:3000/auth/login'
-        : 'http://localhost:3000/auth/register';
+      const data = isLogin
+        ? await login({ email, password })
+        : await register({ firstName, lastName, email, password });
 
-      const payload = isLogin
-        ? { email, password }
-        : { firstName, lastName, email, password };
+      // Update Redux state & localStorage
+      dispatch(setCredentials({ user: data.user, token: data.token }));
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Authentication failed.');
-      }
-
-      // Save token in localStorage
-      localStorage.setItem('token', data.token);
-
-      // Redirect to home dashboard
-      navigate('/home');
+      // Redirect to dashboard
+      navigate('/dashboard');
     } catch (err) {
-      setError(err.message || 'Something went wrong. Please try again.');
+      setError(err.response?.data?.message || err.message || 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
