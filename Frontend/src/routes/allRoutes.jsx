@@ -4,6 +4,7 @@ import LoginPage from '../components/LoginPage';
 import Home from '../components/Home';
 import Dashboard from '../components/dashboard';
 import Editor from '../components/Editor';
+import ImageVideoInspiration from '../components/image&video inspiration';
 import ProtectedRoute from '../components/auth/ProtectedRoute';
 import PublicRoute from '../components/auth/PublicRoute';
 
@@ -45,6 +46,16 @@ const AllRoutes = () => {
         element={
           <ProtectedRoute>
             <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Inspiration route (Images & Videos Pinterest Discovery) */}
+      <Route
+        path="/inspiration"
+        element={
+          <ProtectedRoute>
+            <ImageVideoInspiration />
           </ProtectedRoute>
         }
       />

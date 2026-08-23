@@ -345,7 +345,10 @@ const Dashboard = () => {
 
             <button
               className={`figma-nav-btn ${activeNav === 'video-inspirations' ? 'active' : ''}`}
-              onClick={() => setActiveNav('video-inspirations')}
+              onClick={() => {
+                setActiveNav('video-inspirations');
+                navigate('/inspiration?type=video');
+              }}
             >
               <div className="figma-nav-btn-content">
                 <Video size={15} className="figma-nav-icon-svg" />
@@ -355,7 +358,10 @@ const Dashboard = () => {
 
             <button
               className={`figma-nav-btn ${activeNav === 'image-inspirations' ? 'active' : ''}`}
-              onClick={() => setActiveNav('image-inspirations')}
+              onClick={() => {
+                setActiveNav('image-inspirations');
+                navigate('/inspiration?type=image');
+              }}
             >
               <div className="figma-nav-btn-content">
                 <ImageIcon size={15} className="figma-nav-icon-svg" />
