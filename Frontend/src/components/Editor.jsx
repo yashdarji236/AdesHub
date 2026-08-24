@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import {
   LayoutGrid,
@@ -27,7 +27,7 @@ import {
   ExternalLink,
   X
 } from 'lucide-react';
-import { generateAdImage } from '../services/aiService';
+import { generateAdImage, editAdImage, saveImage, getProjectImages } from '../services/aiService';
 import './Editor.css';
 
 const GENRE_DETAILS = {
@@ -51,6 +51,31 @@ const GENRE_DETAILS = {
     description: 'Artistic campaign illustration engineered for brand storytelling and emotional connection. Emphasizes refined character detailing, thematic color harmony, and memorable creative identity.',
     imageUrl: '/samples/cricket_ad.jpg',
     tags: ['Custom Illustrated Art', 'Campaign Storytelling', 'Brand Creative Authority']
+  },
+  'Character': {
+    category: 'Character',
+    title: 'Character Design & Concept Art',
+    description: 'Premium character concept illustration engineered for distinct personality, anatomical precision, and emotional expression. Design characters, mascots, or digital avatars with visual depth.',
+    imageUrl: '/samples/character_concept.jpg',
+    tags: ['Character Sheet', 'Multi-Angle Concept', 'Branded Avatar']
+  }
+};
+
+const convertUrlToBase64 = async (url) => {
+  if (!url) return '';
+  if (url.startsWith('data:')) return url;
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (error) {
+    console.error('Failed to convert URL to base64:', error);
+    return url;
   }
 };
 
@@ -61,7 +86,8 @@ const Editor = () => {
 
   const projectCategory = location.state?.projectCategory || 'Poster Ad';
   const projectName = location.state?.projectName || `${projectCategory} Project`;
-  const projectId = location.state?.projectId || location.state?.id || null;
+  const { projectId: routeProjectId } = useParams();
+  const projectId = routeProjectId || location.state?.projectId || location.state?.id || null;
   const currentGenre = GENRE_DETAILS[projectCategory] || GENRE_DETAILS['Poster Ad'];
 
   const incomingPrompt =
@@ -101,11 +127,11 @@ const Editor = () => {
   const [generationError, setGenerationError] = useState(null);
 
   const fileInputRef = useRef(null);
-  const [messages, setMessages] = useState([
+  const [messages, setMessages] = useState(() => [
     {
       id: 'm1',
       sender: 'assistant',
-      text: `Canvas ready for "${projectName}". Type your creative prompt below to generate your custom AI ad artwork.`
+      text: `Canvas ready for "${projectName}". Type your creative prompt below to generate your custom AI ${projectCategory === 'Character' ? 'character design' : 'ad artwork'}.`
     }
   ]);
 
@@ -174,10 +200,58 @@ const Editor = () => {
     }
   }, [location.state]);
 
+  useEffect(() => {
+    if (projectId) {
+      const loadProjectImages = async () => {
+        try {
+          const result = await getProjectImages(projectId);
+          if (result && result.success && result.ads && result.ads.length > 0) {
+            const latestAd = result.ads[result.ads.length - 1];
+            setGeneratedAd({
+              imageUrl: latestAd.imageUrl,
+              prompt: latestAd.prompt || 'Saved concept reference',
+              category: latestAd.category || projectCategory,
+              createdAt: latestAd.createdAt
+            });
+            setIsSaved(!!latestAd.saved);
+          }
+        } catch (err) {
+          console.error('Failed to load project images:', err);
+        }
+      };
+      loadProjectImages();
+    }
+  }, [projectId, projectCategory]);
+
   // Prompts for Other AI Modal State
   const [isPromptsModalOpen, setIsPromptsModalOpen] = useState(false);
   const [copiedModelId, setCopiedModelId] = useState(null);
   const [activeModelFilter, setActiveModelFilter] = useState('all');
+
+  const [isSaved, setIsSaved] = useState(false);
+
+  const handleSaveCharacter = async () => {
+    const activeImageUrl = generatedAd?.imageUrl || currentGenre.imageUrl;
+    if (!activeImageUrl) return;
+
+    try {
+      setIsSaved(true);
+      await saveImage({ projectId, imageUrl: activeImageUrl });
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `save-${Date.now()}`,
+          sender: 'assistant',
+          text: `💾 Project "${projectName}" image saved successfully! It is now visible in the ${projectCategory === 'Character' ? 'Characters' : 'Dashboard'} section on your Dashboard.`
+        }
+      ]);
+      setTimeout(() => setIsSaved(false), 3000);
+    } catch (err) {
+      console.error('Error saving character image:', err);
+      setIsSaved(false);
+    }
+  };
 
   // Active theme / creative idea for building model-specific prompts
   const activeCreativeIdea =
@@ -185,7 +259,59 @@ const Editor = () => {
     generatedAd?.prompt ||
     `${projectCategory} commercial advertisement with bold brand layout and creative product framing`;
 
-  const OTHER_AI_MODELS = [
+  const OTHER_AI_MODELS = projectCategory === 'Character' ? [
+    {
+      id: 'midjourney',
+      name: 'Midjourney v6.1',
+      category: 'Concept Art Model Sheet',
+      badge: 'Midjourney',
+      color: '#0d99ff',
+      siteUrl: 'https://www.midjourney.com',
+      prompt: `/imagine prompt: Full body character design sheet of ${activeCreativeIdea}, concept art style, model sheet format, front and side views, detailed character illustration, neutral backdrop, cinematic concept art, Unreal Engine 5 render, highly detailed, 8k resolution --ar 16:9 --v 6.1 --s 250`,
+      tips: 'Best for generating multi-angle consistent concept sheets, distinct costumes, and detailed profiles.'
+    },
+    {
+      id: 'chatgpt',
+      name: 'ChatGPT (DALL·E 3)',
+      category: 'AI Character Concept',
+      badge: 'OpenAI DALL-E 3',
+      color: '#10a37f',
+      siteUrl: 'https://chatgpt.com',
+      prompt: `Create a professional, highly detailed character concept design and model sheet. The character is: "${activeCreativeIdea}". The visual should showcase the character's full outfit, key features, and distinct personality traits. Set against a clean neutral studio background with volumetric soft studio lighting.`,
+      tips: 'Best for complex accessory instructions, descriptive clothes, and rendering specific facial expressions.'
+    },
+    {
+      id: 'flux',
+      name: 'FLUX.1 [dev/schnell]',
+      category: 'Next-Gen Photorealistic Character',
+      badge: 'Black Forest Labs',
+      color: '#ff6b00',
+      siteUrl: 'https://replicate.com/black-forest-labs/flux-1.1-pro',
+      prompt: `masterpiece, full-body concept art of character: ${activeCreativeIdea}, model sheet, clean studio lighting, high resolution, hyper-detailed skin textures, volumetric shading, cinematic character render`,
+      negativePrompt: 'blurry, low quality, deformed, watermark, distorted, oversaturated, amateur',
+      tips: 'Best for anatomically accurate details, crisp textures, and fast character prototyping.'
+    },
+    {
+      id: 'ideogram',
+      name: 'Ideogram 2.0',
+      category: 'Graphic Character Poster',
+      badge: 'Ideogram',
+      color: '#e11d48',
+      siteUrl: 'https://ideogram.ai',
+      prompt: `A stunning graphic character portrait design of "${activeCreativeIdea}", dramatic color palette, highly detailed digital painting style, clean stylized character details, modern character concept art, high definition`,
+      tips: 'Best for bold stylized vector graphic characters, comic book covers, and text layouts.'
+    },
+    {
+      id: 'runway',
+      name: 'Runway Gen-3 / Luma Dream',
+      category: 'Motion Character Video',
+      badge: 'Video AI',
+      color: '#8b5cf6',
+      siteUrl: 'https://runwayml.com',
+      prompt: `Cinematic character animation showcase of ${activeCreativeIdea}. Character turning around or walking forward in slow motion, professional cinematic lighting, 4K resolution, smooth movie trailer fluid motion, 60fps.`,
+      tips: 'Best for animating static character illustrations into cinematic motion sequences.'
+    }
+  ] : [
     {
       id: 'midjourney',
       name: 'Midjourney v6.1',
@@ -466,12 +592,20 @@ const Editor = () => {
     setGenerationError(null);
 
     try {
-      // Call backend AI generation endpoint
-      const result = await generateAdImage({
-        prompt: userText || `Creative ${projectCategory} design`,
-        projectId,
-        category: projectCategory
-      });
+      // Call backend AI generation or editing endpoint
+      const referenceImage = uploaded.length > 0 ? uploaded[0].url : null;
+      const result = referenceImage
+        ? await editAdImage({
+            prompt: userText || `Creative ${projectCategory} design`,
+            projectId,
+            category: projectCategory,
+            image: referenceImage
+          })
+        : await generateAdImage({
+            prompt: userText || `Creative ${projectCategory} design`,
+            projectId,
+            category: projectCategory
+          });
 
       if (result && result.imageUrl) {
         setGeneratedAd({
@@ -621,10 +755,13 @@ const Editor = () => {
   };
 
   // Edit in Chat (Smooth Animated Glide from Canvas to Chat Input)
-  const handleEditInChat = (e) => {
+  const handleEditInChat = async (e) => {
     if (e) e.stopPropagation();
     const activeImageUrl = generatedAd?.imageUrl || currentGenre.imageUrl;
     if (!activeImageUrl) return;
+
+    // Convert reference image to base64 to avoid local private IP issues in the Cloudflare Worker
+    const base64Url = await convertUrlToBase64(activeImageUrl);
 
     if (imageFrameRef.current && chatInputRef.current) {
       const startRect = imageFrameRef.current.getBoundingClientRect();
@@ -656,14 +793,14 @@ const Editor = () => {
         setFlyingGhost(null);
 
         setAttachedImages((prev) => {
-          const alreadyExists = prev.some((img) => img.url === activeImageUrl);
+          const alreadyExists = prev.some((img) => img.url === base64Url);
           if (alreadyExists) return prev;
           return [
             ...prev,
             {
               id: `edit-img-${Date.now()}`,
               name: `${projectName} (Canvas Ref)`,
-              url: activeImageUrl
+              url: base64Url
             }
           ];
         });
@@ -683,7 +820,7 @@ const Editor = () => {
         {
           id: `edit-img-${Date.now()}`,
           name: `${projectName} (Canvas Ref)`,
-          url: activeImageUrl
+          url: base64Url
         }
       ]);
       if (!prompt) {
@@ -749,6 +886,32 @@ const Editor = () => {
           >
             <Sparkles size={15} color="#8ab4f8" />
             <span>Prompts for other AI</span>
+          </button>
+
+          <button
+            type="button"
+            className="stitch-save-btn"
+            onClick={handleSaveCharacter}
+            title={projectCategory === 'Character' ? "Save character to Character Section" : "Save project"}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              backgroundColor: '#a259ff',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '6px 12px',
+              color: '#ffffff',
+              fontSize: '12.5px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              marginLeft: '8px',
+              marginRight: '8px',
+              transition: 'background-color 0.2s'
+            }}
+          >
+            {isSaved ? <Check size={14} /> : <CheckCircle2 size={14} />}
+            <span>{isSaved ? 'Saved!' : 'Save'}</span>
           </button>
 
           {/* User Profile Avatar */}
@@ -853,7 +1016,11 @@ const Editor = () => {
                 <textarea
                   ref={textareaRef}
                   className="stitch-left-textarea"
-                  placeholder={`Describe your ${projectCategory} idea... (e.g. Bold sports poster with vibrant neon energy)`}
+                  placeholder={
+                    projectCategory === 'Character'
+                      ? "Describe your Character idea... (e.g. Futuristic cyber assassin with neon visor)"
+                      : `Describe your ${projectCategory} idea... (e.g. Bold sports poster with vibrant neon energy)`
+                  }
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   rows={3}
@@ -936,7 +1103,9 @@ const Editor = () => {
                   <button
                     className="stitch-hero-btn"
                     title="Image Inspiration"
-                    onClick={() => setPrompt(`High-impact cinematic ${projectCategory} with dynamic lighting, clean typography, and bold product focus.`)}
+                    onClick={() => setPrompt(projectCategory === 'Character'
+                      ? 'Detailed full-body concept art model sheet of character, showcasing detailed costume design and distinct accessories, front and side views, neutral background.'
+                      : `High-impact cinematic ${projectCategory} with dynamic lighting, clean typography, and bold product focus.`)}
                   >
                     <ImageIcon size={18} />
                     <span>Image inspiration</span>
@@ -945,7 +1114,9 @@ const Editor = () => {
                   <button
                     className="stitch-hero-btn"
                     title="Video Inspiration"
-                    onClick={() => setPrompt(`Motion-ready viral ${projectCategory} composition with energetic framing and pop-culture visual hooks.`)}
+                    onClick={() => setPrompt(projectCategory === 'Character'
+                      ? 'Cinematic character showcase animation turning around or walking forward in slow motion, volumetric studio lighting, smooth movie fluid motion.'
+                      : `Motion-ready viral ${projectCategory} composition with energetic framing and pop-culture visual hooks.`)}
                   >
                     <Video size={18} />
                     <span>Video inspiration</span>
@@ -982,7 +1153,7 @@ const Editor = () => {
                       setIsImageSelected(true);
                     }}
                   >
-                    {/* Floating Options Toolbar (Download, Generate again, Edit) */}
+                    {/* Floating Options Toolbar (Download, Save, Generate again, Edit) */}
                     <div className="stitch-image-floating-toolbar" onClick={(e) => e.stopPropagation()}>
                       <button
                         type="button"
@@ -992,6 +1163,18 @@ const Editor = () => {
                       >
                         <Download size={14} />
                         <span>Download</span>
+                      </button>
+
+                      <div className="stitch-toolbar-divider" />
+
+                      <button
+                        type="button"
+                        className={`stitch-toolbar-btn save ${isSaved ? 'saved' : ''}`}
+                        onClick={handleSaveCharacter}
+                        title={projectCategory === 'Character' ? "Save character to Character Section" : "Save artwork"}
+                      >
+                        {isSaved ? <Check size={14} color="#10a37f" /> : <CheckCircle2 size={14} color="#a259ff" />}
+                        <span>{isSaved ? 'Saved' : 'Save'}</span>
                       </button>
 
                       <div className="stitch-toolbar-divider" />
@@ -1058,6 +1241,18 @@ const Editor = () => {
                       >
                         <Download size={14} />
                         <span>Download</span>
+                      </button>
+
+                      <div className="stitch-toolbar-divider" />
+
+                      <button
+                        type="button"
+                        className={`stitch-toolbar-btn save ${isSaved ? 'saved' : ''}`}
+                        onClick={handleSaveCharacter}
+                        title={projectCategory === 'Character' ? "Save character to Character Section" : "Save artwork"}
+                      >
+                        {isSaved ? <Check size={14} color="#10a37f" /> : <CheckCircle2 size={14} color="#a259ff" />}
+                        <span>{isSaved ? 'Saved' : 'Save'}</span>
                       </button>
 
                       <div className="stitch-toolbar-divider" />

@@ -19,6 +19,7 @@ export const createProject = async (req, res) => {
     if (lower.includes('poster')) normalizedCategory = 'Poster Ad';
     else if (lower.includes('meme')) normalizedCategory = 'Meme Ad';
     else if (lower.includes('brand')) normalizedCategory = 'Brand Ad';
+    else if (lower.includes('character')) normalizedCategory = 'Character';
 
     // 1. Create Project document linked to logged-in user
     const project = await Project.create({
@@ -52,11 +53,25 @@ export const createProject = async (req, res) => {
 // Get all projects for the logged-in user
 export const getUserProjects = async (req, res) => {
   try {
-    const projects = await Project.find({ userId: req.user.id }).sort({ createdAt: -1 });
+    const projects = await Project.find({ userId: req.user.id }).sort({ createdAt: -1 }).lean();
+
+    // Fetch corresponding Ads for each project to retrieve the latest generated thumbnail
+    const projectsWithAds = await Promise.all(
+      projects.map(async (project) => {
+        const adsDoc = await Ads.findOne({ projectId: project._id }).lean();
+        const latestImage = adsDoc?.ads && adsDoc.ads.length > 0
+          ? adsDoc.ads[adsDoc.ads.length - 1].imageUrl
+          : null;
+        return {
+          ...project,
+          thumbnailUrl: latestImage,
+        };
+      })
+    );
 
     return res.json({
       success: true,
-      projects,
+      projects: projectsWithAds,
     });
   } catch (error) {
     console.error('Error fetching user projects:', error);

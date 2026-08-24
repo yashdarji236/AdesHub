@@ -16,7 +16,7 @@ const ProjectSchema = new mongoose.Schema(
     projectCategory: {
       type: String,
       required: true,
-      enum: ['Poster Ad', 'Meme Ad', 'Brand Ad'],
+      enum: ['Poster Ad', 'Meme Ad', 'Brand Ad', 'Character'],
     },
   },
   {

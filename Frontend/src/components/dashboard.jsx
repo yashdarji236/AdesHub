@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { logout } from '../store/authSlice';
 import { createProject, getUserProjects } from '../services/projectService';
+import { getSavedCharacters } from '../services/aiService';
 import {
   LayoutDashboard,
   Search,
@@ -31,18 +32,19 @@ import {
   Layers,
   Check,
   Star,
-  MoreVertical
+  MoreVertical,
+  Users
 } from 'lucide-react';
 import './dashboard.css';
 
 // Authentic Figma Brand Logo Icons
 const FigmaDesignIcon = ({ size = 12 }) => (
   <svg width={size} height={size} viewBox="0 0 38 57" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M19 28.5C19 23.2533 23.2533 19 28.5 19C33.7467 19 38 23.2533 38 28.5C38 33.7467 33.7467 38 28.5 38C23.2533 38 19 33.7467 19 28.5Z" fill="#1ABCFE"/>
-    <path d="M0 47.5C0 42.2533 4.25329 38 9.5 38H19V47.5C19 52.7467 14.7467 57 9.5 57C4.25329 57 0 52.7467 0 47.5Z" fill="#0ACF83"/>
-    <path d="M19 0V19H28.5C33.7467 19 38 14.7467 38 9.5C38 4.25329 33.7467 0 28.5 0H19Z" fill="#FF7262"/>
-    <path d="M0 9.5C0 14.7467 4.25329 19 9.5 19H19V0H9.5C4.25329 0 0 4.25329 0 9.5Z" fill="#F24E1E"/>
-    <path d="M0 28.5C0 33.7467 4.25329 38 9.5 38H19V19H9.5C4.25329 19 0 23.2533 0 28.5Z" fill="#A259FF"/>
+    <path d="M19 28.5C19 23.2533 23.2533 19 28.5 19C33.7467 19 38 23.2533 38 28.5C38 33.7467 33.7467 38 28.5 38C23.2533 38 19 33.7467 19 28.5Z" fill="#1ABCFE" />
+    <path d="M0 47.5C0 42.2533 4.25329 38 9.5 38H19V47.5C19 52.7467 14.7467 57 9.5 57C4.25329 57 0 52.7467 0 47.5Z" fill="#0ACF83" />
+    <path d="M19 0V19H28.5C33.7467 19 38 14.7467 38 9.5C38 4.25329 33.7467 0 28.5 0H19Z" fill="#FF7262" />
+    <path d="M0 9.5C0 14.7467 4.25329 19 9.5 19H19V0H9.5C4.25329 0 0 4.25329 0 9.5Z" fill="#F24E1E" />
+    <path d="M0 28.5C0 33.7467 4.25329 38 9.5 38H19V19H9.5C4.25329 19 0 23.2533 0 28.5Z" fill="#A259FF" />
   </svg>
 );
 
@@ -138,6 +140,27 @@ const Dashboard = () => {
   const [projectName, setProjectName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+  const [savedCharacters, setSavedCharacters] = useState([]);
+  const [isLoadingSaved, setIsLoadingSaved] = useState(false);
+
+  useEffect(() => {
+    if (activeNav === 'characters') {
+      const loadSaved = async () => {
+        setIsLoadingSaved(true);
+        try {
+          const result = await getSavedCharacters();
+          if (result && result.savedImages) {
+            setSavedCharacters(result.savedImages);
+          }
+        } catch (err) {
+          console.error('Failed to load saved characters:', err);
+        } finally {
+          setIsLoadingSaved(false);
+        }
+      };
+      loadSaved();
+    }
+  }, [activeNav]);
 
   // Fetch saved user projects from MongoDB on component load
   useEffect(() => {
@@ -160,6 +183,7 @@ const Dashboard = () => {
               starred: false,
               format: p.projectCategory,
               createdAt: p.createdAt,
+              thumbnailUrl: p.thumbnailUrl,
             };
           });
           setFiles(loadedCards);
@@ -185,7 +209,8 @@ const Dashboard = () => {
       fileTypeFilter === 'All files' ||
       (fileTypeFilter === 'Design files' && f.type === 'design') ||
       (fileTypeFilter === 'FigJam boards' && f.type === 'figjam');
-    return matchesSearch && matchesTab && matchesType;
+    const matchesNav = activeNav !== 'characters' || f.format === 'Character';
+    return matchesSearch && matchesTab && matchesType && matchesNav;
   });
 
   const handleCreateFile = (type) => {
@@ -205,6 +230,12 @@ const Dashboard = () => {
     setShowCreateAdModal(true);
   };
 
+  const handleOpenCreateCharacterFlow = () => {
+    setSelectedAdType('character');
+    setProjectName('Untitled Character');
+    setShowNameProjectModal(true);
+  };
+
   const handleSelectAdType = (adType) => {
     setSelectedAdType(adType.id);
     setProjectName(`${adType.title} Campaign`);
@@ -214,9 +245,10 @@ const Dashboard = () => {
 
   const handleSaveAndGoToEditor = async () => {
     if (isSaving) return;
-    const chosen = AD_TYPES.find((a) => a.id === selectedAdType);
-    const finalTitle = projectName.trim() || `${chosen?.title || 'Ad'} #${files.length + 1}`;
-    const categoryTitle = chosen?.title || 'Poster ad';
+    const isCharacter = selectedAdType === 'character';
+    const chosen = isCharacter ? null : AD_TYPES.find((a) => a.id === selectedAdType);
+    const finalTitle = projectName.trim() || (isCharacter ? `Character Project #${files.length + 1}` : `${chosen?.title || 'Ad'} #${files.length + 1}`);
+    const categoryTitle = isCharacter ? 'Character' : (chosen?.title || 'Poster ad');
 
     setIsSaving(true);
     try {
@@ -334,6 +366,16 @@ const Dashboard = () => {
             </button>
 
             <button
+              className={`figma-nav-btn ${activeNav === 'characters' ? 'active' : ''}`}
+              onClick={() => setActiveNav('characters')}
+            >
+              <div className="figma-nav-btn-content">
+                <Users size={15} className="figma-nav-icon-svg" />
+                <span>Characters</span>
+              </div>
+            </button>
+
+            <button
               className={`figma-nav-btn ${activeNav === 'history' ? 'active' : ''}`}
               onClick={() => setActiveNav('history')}
             >
@@ -394,14 +436,16 @@ const Dashboard = () => {
             {activeNav === 'dashboard'
               ? 'Dashboard'
               : activeNav === 'home'
-              ? 'Home'
-              : activeNav === 'history'
-              ? 'History'
-              : activeNav === 'video-inspirations'
-              ? 'Video Inspirations'
-              : activeNav === 'image-inspirations'
-              ? 'Image Inspirations'
-              : 'Inspirations'}
+                ? 'Home'
+                : activeNav === 'characters'
+                  ? 'Characters'
+                  : activeNav === 'history'
+                    ? 'History'
+                    : activeNav === 'video-inspirations'
+                      ? 'Video Inspirations'
+                      : activeNav === 'image-inspirations'
+                        ? 'Image Inspirations'
+                        : 'Inspirations'}
           </h1>
 
           <div className="figma-creation-pills">
@@ -576,23 +620,142 @@ const Dashboard = () => {
         {viewMode === 'grid' ? (
           <div className="figma-files-gallery-grid">
             {/* Create Box with + icon */}
+            {activeNav !== 'characters' && (
+              <div
+                className="figma-create-ad-card"
+                onClick={handleOpenCreateAdModal}
+                title="Create new ad"
+              >
+                <div className="figma-create-ad-canvas">
+                  <div className="figma-create-ad-plus-icon">
+                    <Plus size={36} strokeWidth={2.2} />
+                  </div>
+                </div>
+                <div className="figma-create-ad-footer">
+                  <span className="figma-create-ad-title">create new ad</span>
+                </div>
+              </div>
+            )}
+
+            {/* Create Character Box with + icon */}
             <div
               className="figma-create-ad-card"
-              onClick={handleOpenCreateAdModal}
-              title="Create new ad"
+              onClick={handleOpenCreateCharacterFlow}
+              title="Create new character"
             >
-              <div className="figma-create-ad-canvas">
-                <div className="figma-create-ad-plus-icon">
-                  <Plus size={36} strokeWidth={2.2} />
+              <div className="figma-create-ad-canvas" style={{ background: 'linear-gradient(135deg, #1e1e1e 0%, #251e35 100%)' }}>
+                <div className="figma-create-ad-plus-icon" style={{ borderColor: '#a259ff' }}>
+                  <Plus size={36} strokeWidth={2.2} color="#a259ff" />
                 </div>
               </div>
               <div className="figma-create-ad-footer">
-                <span className="figma-create-ad-title">create new ad</span>
+                <span className="figma-create-ad-title">create new character</span>
               </div>
             </div>
 
             {/* Dynamically created ad cards or Skeleton loaders */}
-            {isLoadingProjects ? (
+            {activeNav === 'characters' ? (
+              isLoadingSaved ? (
+                Array.from({ length: 3 }).map((_, idx) => (
+                  <div key={`skel-saved-${idx}`} className="figma-skeleton-box">
+                    <div className="figma-skeleton-canvas">
+                      <div className="figma-skeleton-inner-wire" />
+                    </div>
+                  </div>
+                ))
+              ) : savedCharacters.length > 0 ? (
+                savedCharacters.map((char) => (
+                  <div
+                    key={char.id}
+                    className="figma-file-box saved-char-box group relative overflow-hidden rounded-lg border border-slate-200 bg-white transition-all duration-300 hover:shadow-md"
+                    onClick={() => navigate(`/editor/${char.projectId}`, { state: { projectName: char.projectName, projectCategory: char.category } })}
+                    style={{ cursor: 'pointer', height: 'auto', display: 'flex', flexDirection: 'column' }}
+                    title={`Open ${char.projectName} in Editor`}
+                  >
+                    <div className="figma-file-canvas-preview relative w-full overflow-hidden bg-slate-100" style={{ height: '170px' }}>
+                      <img
+                        src={char.imageUrl}
+                        alt={char.projectName}
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+
+                      {/* Premium Hover Overlay (Figma/Gemini Style) */}
+                      <div
+                        className="absolute inset-0 flex flex-col justify-end p-3 opacity-0 transition-opacity duration-300 hover:opacity-100"
+                        style={{
+                          background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 60%, transparent 100%)',
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          color: '#fff',
+                        }}
+                      >
+                        <p className="text-xs font-semibold text-purple-300 uppercase tracking-wider mb-0.5" style={{ fontSize: '10px', color: '#a259ff', margin: 0 }}>{char.category}</p>
+                        <h4 className="text-xs font-bold text-white truncate mb-0.5" style={{ margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{char.projectName}</h4>
+                        <p className="text-[10px] text-slate-300 line-clamp-2 mb-2 italic" style={{ fontSize: '9px', color: '#ccc', margin: '0 0 8px 0', display: '-webkit-box', WebKitLineClamp: 2, WebKitBoxOrient: 'vertical', overflow: 'hidden' }}>"{char.prompt}"</p>
+
+                        <div className="flex items-center gap-1.5" style={{ display: 'flex', gap: '6px' }}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/editor/${char.projectId}`, { state: { projectName: char.projectName, projectCategory: char.category } });
+                            }}
+                            className="flex-1 flex items-center justify-center gap-1 rounded bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium py-1 transition-colors"
+                            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', background: '#a259ff', border: 'none', borderRadius: '4px', color: '#fff', fontSize: '10px', padding: '4px 8px', cursor: 'pointer' }}
+                          >
+                            <PenTool size={10} />
+                            <span>Open Editor</span>
+                          </button>
+
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              try {
+                                const response = await fetch(char.imageUrl);
+                                const blob = await response.blob();
+                                const url = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `${char.projectName.replace(/\s+/g, '_')}_concept.jpg`;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                              } catch (err) {
+                                window.open(char.imageUrl, '_blank');
+                              }
+                            }}
+                            className="p-1 rounded bg-white/20 hover:bg-white/30 text-white transition-colors"
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '4px', color: '#fff', padding: '4px 6px', cursor: 'pointer' }}
+                            title="Download Character Concept"
+                          >
+                            <Download size={11} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="figma-file-card-bottom" style={{ display: 'flex', alignItems: 'center', padding: '8px 12px', background: '#2c2c2c', color: '#fff', borderTop: '1px solid #3c3c3c' }}>
+                      <div className="figma-file-type-badge design" style={{ background: '#a259ff' }}>
+                        <Sparkles size={14} color="#fff" />
+                      </div>
+                      <div className="figma-file-title-block" style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                        <span className="figma-file-name-line" style={{ fontWeight: 600, fontSize: '12px', color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{char.projectName}</span>
+                        <span className="figma-file-edited-line" style={{ fontSize: '10px', color: '#888888', marginTop: '2px' }}>Saved {new Date(char.createdAt).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="col-span-full py-10 flex flex-col items-center justify-center text-center bg-slate-50/5 p-6" style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '12px', border: '1px dashed #444', color: '#aaa' }}>
+                  <Sparkles size={32} color="#a259ff" style={{ marginBottom: '12px', animation: 'pulse 2s infinite' }} />
+                  <h3 className="text-sm font-semibold text-slate-200 mb-1" style={{ color: '#fff', margin: '0 0 4px 0', fontSize: '14px' }}>Your concept gallery is empty</h3>
+                  <p className="text-xs text-slate-400 max-w-sm" style={{ fontSize: '12px', color: '#888', margin: 0, maxWidth: '320px' }}>Create a new character project, generate artwork in the editor, and click the **Save** button to display your designs here.</p>
+                </div>
+              )
+            ) : isLoadingProjects ? (
               Array.from({ length: 3 }).map((_, idx) => (
                 <div key={`skel-card-${idx}`} className="figma-skeleton-box">
                   <div className="figma-skeleton-canvas">
@@ -616,13 +779,17 @@ const Dashboard = () => {
                   title={`Open ${file.title} in Editor`}
                 >
                   <div className="figma-file-canvas-preview">
-                    <div className="figma-canvas-wireframe">
-                      <div className="figma-wireframe-sheet">
-                        <div className="figma-wire-head"></div>
-                        <div className="figma-wire-rect"></div>
-                        <div className="figma-wire-head" style={{ width: '40%', background: '#cbd5e1' }}></div>
+                    {file.thumbnailUrl ? (
+                      <img src={file.thumbnailUrl} alt={file.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <div className="figma-canvas-wireframe">
+                        <div className="figma-wireframe-sheet">
+                          <div className="figma-wire-head"></div>
+                          <div className="figma-wire-rect"></div>
+                          <div className="figma-wire-head" style={{ width: '40%', background: '#cbd5e1' }}></div>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
 
                   <div className="figma-file-card-bottom">
@@ -640,21 +807,65 @@ const Dashboard = () => {
           </div>
         ) : (
           <div className="figma-files-list-view">
+            {activeNav !== 'characters' && (
+              <div
+                className="figma-list-item-row create-new"
+                onClick={handleOpenCreateAdModal}
+                style={{ cursor: 'pointer', border: '1px dashed #4a4a4a', borderRadius: '8px' }}
+              >
+                <div className="figma-list-item-name" style={{ color: '#ffffff', fontWeight: 600 }}>
+                  <Plus size={16} />
+                  <span>create new ad</span>
+                </div>
+                <span style={{ color: '#888' }}>New Ad Project</span>
+                <span style={{ color: '#888' }}>Click to choose type</span>
+                <span></span>
+              </div>
+            )}
+
             <div
               className="figma-list-item-row create-new"
-              onClick={handleOpenCreateAdModal}
-              style={{ cursor: 'pointer', border: '1px dashed #4a4a4a', borderRadius: '8px' }}
+              onClick={handleOpenCreateCharacterFlow}
+              style={{ cursor: 'pointer', border: '1px dashed #a259ff', borderRadius: '8px', marginTop: activeNav === 'characters' ? '0' : '8px' }}
             >
               <div className="figma-list-item-name" style={{ color: '#ffffff', fontWeight: 600 }}>
-                <Plus size={16} />
-                <span>create new ad</span>
+                <Plus size={16} color="#a259ff" />
+                <span>create new character</span>
               </div>
-              <span style={{ color: '#888' }}>New Ad Project</span>
-              <span style={{ color: '#888' }}>Click to choose type</span>
+              <span style={{ color: '#888' }}>New Character Project</span>
+              <span style={{ color: '#888' }}>Click to name character</span>
               <span></span>
             </div>
 
-            {isLoadingProjects ? (
+            {activeNav === 'characters' ? (
+              isLoadingSaved ? (
+                Array.from({ length: 3 }).map((_, idx) => (
+                  <div key={`skel-list-${idx}`} className="figma-skeleton-list-item" />
+                ))
+              ) : savedCharacters.length > 0 ? (
+                savedCharacters.map((char) => (
+                  <div
+                    key={char.id}
+                    className="figma-list-item-row"
+                    onClick={() => navigate(`/editor/${char.projectId}`, { state: { projectName: char.projectName, projectCategory: char.category } })}
+                    style={{ cursor: 'pointer' }}
+                    title={`Open ${char.projectName} in Editor`}
+                  >
+                    <div className="figma-list-item-name">
+                      <Sparkles size={16} color="#a259ff" />
+                      <span>{char.projectName}</span>
+                    </div>
+                    <span style={{ color: '#aaa' }}>{char.category} Concept</span>
+                    <span style={{ color: '#888' }}>Saved {new Date(char.createdAt).toLocaleDateString()}</span>
+                    <span></span>
+                  </div>
+                ))
+              ) : (
+                <div className="py-8 text-center" style={{ color: '#888', fontSize: '13px' }}>
+                  No saved characters yet.
+                </div>
+              )
+            ) : isLoadingProjects ? (
               Array.from({ length: 3 }).map((_, idx) => (
                 <div key={`skel-list-${idx}`} className="figma-skeleton-list-item" />
               ))
@@ -790,9 +1001,11 @@ const Dashboard = () => {
             {/* Selected Format Preview Pill */}
             {selectedAdType && (
               <div className="figma-name-selected-format-pill">
-                <span className="figma-format-pill-label">Selected Ad Format:</span>
+                <span className="figma-format-pill-label">Selected Format:</span>
                 <span className="figma-format-pill-badge">
-                  {AD_TYPES.find((a) => a.id === selectedAdType)?.num}. {AD_TYPES.find((a) => a.id === selectedAdType)?.title}
+                  {selectedAdType === 'character'
+                    ? 'Character Design'
+                    : `${AD_TYPES.find((a) => a.id === selectedAdType)?.num}. ${AD_TYPES.find((a) => a.id === selectedAdType)?.title}`}
                 </span>
               </div>
             )}
